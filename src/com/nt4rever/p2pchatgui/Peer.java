@@ -8,35 +8,42 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.json.Json;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
+
 import java.awt.Font;
 
 import javax.swing.JLabel;
 import javax.swing.SwingConstants;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.StringWriter;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.awt.event.ActionEvent;
 import javax.swing.JScrollPane;
+import java.io.FileOutputStream;
 
 public class Peer extends JFrame {
-
 	private JPanel contentPane;
 	private JTextField txtMessage;
 	private JTextField txtPeers;
 	private JTextArea textArea;
 	private JTextArea txtLog;
 	private String username;
-	private String port;
+	private JTextField txtFile;
+	private Peer mainFrame;
 
 	public Peer(String username, String port) throws IOException {
 		this.username = username;
-		this.port = port;
+		this.mainFrame = this;
 		setTitle(username);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		setBounds(100, 100, 684, 492);
+		setBounds(100, 100, 767, 492);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
@@ -60,7 +67,7 @@ public class Peer extends JFrame {
 		contentPane.add(btnSend);
 
 		JScrollPane scrollPane_1 = new JScrollPane();
-		scrollPane_1.setBounds(481, 11, 170, 179);
+		scrollPane_1.setBounds(481, 11, 248, 179);
 		contentPane.add(scrollPane_1);
 
 		txtLog = new JTextArea();
@@ -70,29 +77,36 @@ public class Peer extends JFrame {
 
 		txtPeers = new JTextField();
 		txtPeers.setText("localhost:8888");
-		txtPeers.setBounds(481, 241, 170, 29);
+		txtPeers.setBounds(513, 241, 170, 29);
 		contentPane.add(txtPeers);
 		txtPeers.setColumns(10);
 
 		JLabel lblNewLabel = new JLabel("Add peers (ip:port)");
 		lblNewLabel.setFont(new Font("Tahoma", Font.BOLD | Font.ITALIC, 13));
 		lblNewLabel.setHorizontalAlignment(SwingConstants.CENTER);
-		lblNewLabel.setBounds(481, 201, 177, 29);
+		lblNewLabel.setBounds(506, 201, 177, 29);
 		contentPane.add(lblNewLabel);
 
 		JButton btnAdd = new JButton("Add");
 		btnAdd.setFont(new Font("Tahoma", Font.PLAIN, 13));
-		btnAdd.setBounds(481, 281, 170, 29);
+		btnAdd.setBounds(513, 281, 170, 29);
 		contentPane.add(btnAdd);
 
 		JButton btnExit = new JButton("Exit");
-		btnExit.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-			}
-		});
+
 		btnExit.setFont(new Font("Tahoma", Font.PLAIN, 13));
-		btnExit.setBounds(481, 321, 170, 29);
+		btnExit.setBounds(513, 413, 170, 29);
 		contentPane.add(btnExit);
+
+		txtFile = new JTextField();
+		txtFile.setColumns(10);
+		txtFile.setBounds(513, 324, 170, 29);
+		contentPane.add(txtFile);
+
+		JButton btnSendFile = new JButton("Send File");
+		btnSendFile.setFont(new Font("Tahoma", Font.PLAIN, 13));
+		btnSendFile.setBounds(513, 364, 170, 29);
+		contentPane.add(btnSendFile);
 		setVisible(true);
 
 		ServerThread serverThread = new ServerThread(port);
@@ -105,7 +119,7 @@ public class Peer extends JFrame {
 				if (!peers.isEmpty()) {
 					try {
 						updateListenToPeers(peers);
-						txtPeers.setText("");
+						txtPeers.setText("localhost:");
 					} catch (IOException e1) {
 						e1.printStackTrace();
 					}
@@ -127,12 +141,33 @@ public class Peer extends JFrame {
 
 			}
 		});
-		
+
 		btnExit.addActionListener(new ActionListener() {
-			
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				System.exit(0);
+			}
+		});
+
+		btnSendFile.addActionListener(new ActionListener() {
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				txtFile.setText("");
+				JFileChooser fileChooser = new JFileChooser();
+				fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+				fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+				int result = fileChooser.showOpenDialog(null);
+				if (result == JFileChooser.APPROVE_OPTION) {
+					String nameFile = fileChooser.getSelectedFile().getName();
+					String pathFile = (fileChooser.getSelectedFile().getAbsolutePath());
+					txtFile.setText(pathFile);
+					txtLog.append("\nSendFile: " + txtFile.getText());
+					txtLog.append("\nPath: " + pathFile);
+					sendFile(nameFile, pathFile, serverThread);
+				}
+
 			}
 		});
 	}
@@ -145,7 +180,7 @@ public class Peer extends JFrame {
 			try {
 				txtLog.append("\n[" + getLogTime() + "]" + " add peer (" + i + ")");
 				socket = new Socket(address[0], Integer.valueOf(address[1]));
-				new PeerThread(socket, textArea).start();
+				new PeerThread(socket, textArea, mainFrame).start();
 			} catch (Exception e) {
 				e.printStackTrace();
 				if (socket != null) {
@@ -166,9 +201,50 @@ public class Peer extends JFrame {
 		}
 	}
 
+	public void sendFile(String nameFile, String pathFile, ServerThread serverThread) {
+		serverThread.sendFile(nameFile, pathFile);
+		textArea.append("\nSending file " + nameFile + "...");
+	}
+
 	public String getLogTime() {
 		SimpleDateFormat formatter = new SimpleDateFormat("HH:mm:ss");
 		Date date = new Date();
 		return formatter.format(date);
+	}
+
+	public void showSaveFile(String nameFileReceive) {
+		JFileChooser fileChooser = new JFileChooser();
+		fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+		fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		int result = fileChooser.showSaveDialog(null);
+		if (result == JFileChooser.APPROVE_OPTION) {
+			File file = new File(fileChooser.getSelectedFile().getAbsolutePath() + "/" + nameFileReceive);
+			if (!file.exists()) {
+				try {
+					file.createNewFile();
+					Thread.sleep(1000);
+					InputStream input = new FileInputStream(nameFileReceive);
+					OutputStream output = new FileOutputStream(file.getAbsolutePath());
+					copyFileReceive(input, output, nameFileReceive);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	public void copyFileReceive(InputStream inputStr, OutputStream outputStr, String path) throws IOException {
+		byte[] buffer = new byte[1024];
+		int lenght;
+		while ((lenght = inputStr.read(buffer)) > 0) {
+			outputStr.write(buffer, 0, lenght);
+		}
+		inputStr.close();
+		outputStr.close();
+		File fileTemp = new File(path);
+		if (fileTemp.exists()) {
+			fileTemp.delete();
+		}
+		textArea.append("\nReceive file success!");
 	}
 }
